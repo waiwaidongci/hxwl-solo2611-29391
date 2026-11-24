@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from src.config.database import connection
 from src.config.settings import ARTIFACTS
-from src.constants.enums import Review, Role, Status
+from src.constants.enums import DatasetKind, Review, Role, RunKind, Status
 from src.controllers.auth import allow, current
 from src.domain.spec import SPEC
 from src.models.identity import User
@@ -34,12 +34,32 @@ def index(db: Session = Depends(connection), actor: User = Depends(current)):
 @router.post('', status_code=202)
 def create(body: RunRequest, db: Session = Depends(connection),
            actor: User = Depends(allow(Role.ADMIN, Role.ANALYST))):
-    if not db.get(Dataset, body.dataset_id):
+    dataset = db.get(Dataset, body.dataset_id)
+    if not dataset:
         raise HTTPException(404, '找不到指定的数据批次')
-    item = Run(name=body.name, dataset_id=body.dataset_id, params=normalize_params(body.params), author=actor.username)
+    if body.kind == RunKind.ANALYSIS:
+        if dataset.kind != DatasetKind.LEDGER:
+            raise ValueError('台账关联分析须使用合并台账批次')
+        aux_dataset_id = None
+    elif body.kind == RunKind.RECONCILE:
+        if dataset.kind != DatasetKind.DEPARTURES:
+            raise ValueError('跨系统对账的发车记录批次类型不符，请重新选择')
+        if not body.aux_dataset_id:
+            raise ValueError('跨系统对账需要同时选择候车清点批次')
+        aux = db.get(Dataset, body.aux_dataset_id)
+        if not aux:
+            raise HTTPException(404, '找不到指定的候车清点批次')
+        if aux.kind != DatasetKind.CHECKS:
+            raise ValueError('跨系统对账的候车清点批次类型不符，请重新选择')
+        aux_dataset_id = aux.id
+    else:
+        raise ValueError('未知的运行类型，请重新打开工作面板')
+    item = Run(name=body.name, dataset_id=body.dataset_id, aux_dataset_id=aux_dataset_id, kind=body.kind,
+               params=normalize_params(body.params), author=actor.username)
     db.add(item)
     db.flush()
-    record(db, actor.username, 'analysis.queued', item.id, dataset_id=item.dataset_id)
+    record(db, actor.username, f'{item.kind}.queued', item.id, dataset_id=item.dataset_id,
+           aux_dataset_id=item.aux_dataset_id)
     db.commit()
     wake()
     return views.run(item, detail=True)

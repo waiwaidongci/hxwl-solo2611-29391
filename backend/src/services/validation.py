@@ -3,7 +3,8 @@ import io
 import math
 from datetime import date
 from src.domain import analysis
-from src.domain.spec import SPEC
+from src.domain.spec import KIND_FIELDS, SPEC
+from src.services import reconcile
 
 
 def cell(field, raw):
@@ -44,9 +45,11 @@ def cell(field, raw):
     return value
 
 
-def parse_rows(text):
+def parse_rows(text, kind='ledger'):
+    if kind not in KIND_FIELDS:
+        raise ValueError('\u672a\u77e5\u7684\u6570\u636e\u6279\u6b21\u7c7b\u578b')
     reader = csv.DictReader(io.StringIO(text.removeprefix('\ufeff'), newline=''), strict=True)
-    fields = SPEC['fields']
+    fields = KIND_FIELDS[kind]
     keys = {field['key'] for field in fields}
     required = {field['key'] for field in fields if field.get('required', True)}
     rows = []
@@ -67,8 +70,10 @@ def parse_rows(text):
         raise ValueError(f'CSV 第 {reader.line_num} 行附近格式不正确') from None
     if not rows:
         raise ValueError('CSV 至少需要一行有效数据')
-    if hasattr(analysis, 'validate_rows'):
+    if kind == 'ledger' and hasattr(analysis, 'validate_rows'):
         analysis.validate_rows(rows)
+    elif kind in ('checks', 'departures'):
+        reconcile.validate_source_rows(rows, kind)
     return rows
 
 

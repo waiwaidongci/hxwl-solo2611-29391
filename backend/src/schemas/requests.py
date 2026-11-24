@@ -13,9 +13,12 @@ class Upload(Request):
     name: str = Field(min_length=1, max_length=120)
     filename: str = Field(min_length=1, max_length=160)
     csv_text: str = Field(min_length=1, max_length=2_000_000)
+    kind: str = Field(default='ledger', max_length=20)
 
 class RunRequest(Request):
     dataset_id: int = Field(gt=0)
+    aux_dataset_id: int | None = Field(default=None, gt=0)
+    kind: str = Field(default='analysis', max_length=20)
     name: str = Field(min_length=1, max_length=120)
     params: dict = Field(default_factory=dict)
 

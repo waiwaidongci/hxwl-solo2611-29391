@@ -2,12 +2,14 @@ from src.utils.time import iso
 
 
 def dataset(item):
-    return {'id': item.id, 'name': item.name, 'filename': item.filename, 'row_count': item.row_count,
-            'checksum': item.checksum, 'author': item.author, 'created_at': iso(item.created_at)}
+    return {'id': item.id, 'name': item.name, 'filename': item.filename, 'kind': item.kind or 'ledger',
+            'row_count': item.row_count, 'checksum': item.checksum, 'author': item.author,
+            'created_at': iso(item.created_at)}
 
 
 def run(item, detail=False):
-    item_view = {'id': item.id, 'dataset_id': item.dataset_id, 'name': item.name, 'status': item.status,
+    item_view = {'id': item.id, 'dataset_id': item.dataset_id, 'aux_dataset_id': item.aux_dataset_id,
+                 'name': item.name, 'kind': item.kind or 'analysis', 'status': item.status,
                  'author': item.author, 'review': item.review, 'decision': item.decision,
                  'created_at': iso(item.created_at), 'finished_at': iso(item.finished_at),
                  'scheduled_at': iso(item.scheduled_at), 'schedule_id': item.schedule_id,

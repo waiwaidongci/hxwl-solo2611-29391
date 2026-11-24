@@ -15,3 +15,12 @@ class Review(StrEnum):
     PENDING = 'pending'
     ACCEPTED = 'accepted'
     RETURNED = 'returned'
+
+class RunKind(StrEnum):
+    ANALYSIS = 'analysis'
+    RECONCILE = 'reconcile'
+
+class DatasetKind(StrEnum):
+    LEDGER = 'ledger'
+    CHECKS = 'checks'
+    DEPARTURES = 'departures'

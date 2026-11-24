@@ -91,6 +91,11 @@ def _read_parameters(params):
     return period, minimum, tau_threshold, queue_threshold
 
 
+def in_period(departure_time, period):
+    observed_period = MORNING_PEAK if "06:00" <= departure_time < "09:00" else OTHER_PERIODS
+    return period in (ALL_PERIODS, observed_period)
+
+
 def _read_observations(rows, period):
     observations = defaultdict(list)
     seen_departures = set()
@@ -119,8 +124,7 @@ def _read_observations(rows, period):
         if departure in seen_departures:
             raise ValueError(f"{prefix}与已有记录重复（{route}，{service_date} {departure_time}）。")
         seen_departures.add(departure)
-        observed_period = MORNING_PEAK if "06:00" <= departure_time < "09:00" else OTHER_PERIODS
-        if period in (ALL_PERIODS, observed_period):
+        if in_period(departure_time, period):
             observations[route].append((headway, queue))
     return observations
 
@@ -154,6 +158,24 @@ def _summary(period, eligible, pilots, minimum, tau_threshold, queue_threshold):
         f"{period}没有可判定的线路。请按线路补采至至少 {minimum} 条记录，"
         "并覆盖有变化的班距与候车人数。"
     )
+
+
+def read_parameters(params):
+    """Validate and return (period, minimum, tau_threshold, queue_threshold)."""
+    return _read_parameters(params)
+
+
+def determine(observations, params):
+    """Decide one route from its (headway, queue) observations under current thresholds."""
+    _, minimum, tau_threshold, queue_threshold = _read_parameters(params)
+    count = len(observations)
+    if not count:
+        return {"count": 0, "p90": None, "tau": None, "action": "补采发车记录"}
+    queues = sorted(queue for _, queue in observations)
+    p90 = queues[(9 * count + 9) // 10 - 1]
+    tau = _count_pairs(observations).tau()
+    return {"count": count, "p90": p90, "tau": tau,
+            "action": _route_action(count, tau, p90, minimum, tau_threshold, queue_threshold)}
 
 
 def analyze(rows, params):

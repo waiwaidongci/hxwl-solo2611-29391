@@ -24,9 +24,11 @@ class Run(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     dataset_id: Mapped[int] = mapped_column(ForeignKey('datasets.id'))
+    aux_dataset_id: Mapped[int | None] = mapped_column(ForeignKey('datasets.id'))
     schedule_id: Mapped[int | None] = mapped_column(ForeignKey('schedules.id'))
     scheduled_at: Mapped[datetime | None]
     name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(20), default='analysis')
     status: Mapped[str] = mapped_column(String(20), default=Status.QUEUED, index=True)
     params: Mapped[dict] = mapped_column(JSON)
     result: Mapped[dict | None] = mapped_column(JSON)

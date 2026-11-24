@@ -4,6 +4,7 @@ from sqlalchemy import and_, or_, select
 from src.config.database import Session
 from src.constants.enums import Status
 from src.domain.analysis import analyze
+from src.domain.reconcile import reconcile
 from src.domain.spec import SPEC
 from src.models.jobs import Delivery, Run, Schedule
 from src.models.source import Dataset
@@ -53,20 +54,25 @@ def claim():
             job.status = Status.FAILED
             job.error = '后台进程多次中断，请发起新的运行'
             job.finished_at = stamp
-            record(db, 'worker', 'analysis.failed', job.id, reason=job.error)
+            record(db, 'worker', f'{job.kind or "analysis"}.failed', job.id, reason=job.error)
             return None
         job.status = Status.RUNNING
         job.attempt += 1
         job.lease_until = stamp + timedelta(minutes=3)
+        # 恢复中断运行时沿用接单时的两份记录批次和门槛，批次不可变故内容一致。
         records = db.get(Dataset, job.dataset_id).rows
-        return job.id, job.attempt, records, job.params
+        aux_records = db.get(Dataset, job.aux_dataset_id).rows if job.aux_dataset_id else None
+        return job.id, job.attempt, job.kind or 'analysis', records, aux_records, job.params
 
 
 def execute(lease):
-    job_id, attempt, rows, params = lease
+    job_id, attempt, kind, rows, aux_rows, params = lease
     result = export = failure = None
     try:
-        result = analyze(rows, params)
+        if kind == 'reconcile':
+            result = reconcile(aux_rows or [], rows or [], params)
+        else:
+            result = analyze(rows, params)
         export = write_report(job_id, attempt, result)
     except ValueError as error:
         failure = str(error)[:500]
@@ -83,7 +89,7 @@ def execute(lease):
         job.result = None if failure else result
         job.export_file = export
         job.error = failure
-        record(db, 'worker', f'analysis.{job.status}', job.id, attempt=attempt, reason=failure)
+        record(db, 'worker', f'{kind}.{job.status}', job.id, attempt=attempt, reason=failure)
         if job.schedule_id:
             plan = db.get(Schedule, job.schedule_id)
             ready = not failure and result.get('ready', True)

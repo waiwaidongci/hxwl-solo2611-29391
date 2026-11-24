@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from src.config.database import connection
 from src.constants.enums import Role
 from src.controllers.auth import allow, current
-from src.domain.spec import SPEC
+from src.domain.spec import KIND_SAMPLES, SPEC
 from src.models.identity import User
 from src.models.source import Dataset
 from src.schemas.requests import Upload
@@ -23,9 +23,11 @@ def spec():
 
 
 @router.get('/template')
-def sample(actor: User = Depends(current)):
-    filename = quote(SPEC['sample_name'])
-    return Response(template(), media_type='text/csv; charset=utf-8',
+def sample(kind: str = Query('ledger'), actor: User = Depends(current)):
+    if kind not in KIND_SAMPLES:
+        raise ValueError('未知的数据批次类型')
+    filename = quote(KIND_SAMPLES[kind])
+    return Response(template(kind), media_type='text/csv; charset=utf-8',
                     headers={'Content-Disposition': f"attachment; filename*=UTF-8''{filename}"})
 
 
@@ -46,9 +48,9 @@ def details(dataset_id: int, offset: int = Query(0, ge=0), limit: int = Query(16
 @router.post('/datasets', status_code=201)
 def upload(body: Upload, db: Session = Depends(connection),
            actor: User = Depends(allow(Role.ADMIN, Role.ANALYST))):
-    rows = parse_rows(body.csv_text)
-    item, created = save(db, body.name, body.filename, rows, actor.username)
+    rows = parse_rows(body.csv_text, body.kind)
+    item, created = save(db, body.name, body.filename, rows, actor.username, body.kind)
     if created:
-        record(db, actor.username, 'dataset.imported', item.id, rows=item.row_count)
+        record(db, actor.username, 'dataset.imported', item.id, rows=item.row_count, kind=item.kind)
     db.commit()
     return {**views.dataset(item), 'created': created}

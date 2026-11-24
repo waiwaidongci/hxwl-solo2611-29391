@@ -15,11 +15,14 @@ def seed():
         for role in Role:
             if not db.get(User, role.value):
                 db.add(User(username=role.value, role=role, password_hash=hash_password(f'{role.value}-demo-2611')))
-        item, created = save(db, SPEC['default_dataset'], SPEC['sample_name'], demo_rows(), 'seed')
+        seeded = {}
+        for kind in SPEC['dataset_kinds']:
+            name = kind['sample_name'].removesuffix('.csv')
+            item, _ = save(db, name, kind['sample_name'], demo_rows(kind['key']), 'seed', kind['key'])
+            seeded[kind['key']] = item.id
         return {'users': db.scalar(select(func.count()).select_from(User)),
                 'datasets': db.scalar(select(func.count()).select_from(Dataset)),
-                'seed_dataset_id': item.id, 'row_count': item.row_count, 'checksum': item.checksum,
-                'created_dataset': created}
+                'seed_dataset_ids': seeded}
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ import json
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from src.domain.demo import demo_rows
-from src.domain.spec import SPEC
+from src.domain.spec import KIND_FIELDS
 from src.models.source import Dataset
 
 
@@ -14,13 +14,13 @@ def checksum(rows):
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def save(db, name, filename, rows, actor):
+def save(db, name, filename, rows, actor, kind='ledger'):
     signature = checksum(rows)
     lookup = select(Dataset).where(Dataset.name == name, Dataset.checksum == signature)
     existing = db.scalar(lookup)
     if existing:
         return existing, False
-    dataset = Dataset(name=name, filename=filename, checksum=signature, rows=rows,
+    dataset = Dataset(name=name, filename=filename, kind=kind, checksum=signature, rows=rows,
                       row_count=len(rows), author=actor)
     try:
         with db.begin_nested():
@@ -34,11 +34,11 @@ def save(db, name, filename, rows, actor):
     return dataset, True
 
 
-def template():
-    fields = [field['key'] for field in SPEC['fields']]
+def template(kind='ledger'):
+    fields = [field['key'] for field in KIND_FIELDS[kind]]
     buffer = io.StringIO(newline='')
     writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction='ignore')
     writer.writeheader()
     # The complete representative dataset also works as a reproducible import fixture.
-    writer.writerows(demo_rows())
+    writer.writerows(demo_rows(kind))
     return '\ufeff' + buffer.getvalue()
